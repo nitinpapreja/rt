@@ -58,6 +58,9 @@ while running because MySQL, MariaDB, and Postgres will create a
 temporary copy of the table while running. If you don't have sufficient
 space, it can cause this step to fail.
 
+You can skip this step by setting NoBigintUpgrade to 1 in the $FullTextSearch
+section of your RT configuration.
+
 =back
 
 =head2 Notable Changes
