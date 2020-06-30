@@ -14,7 +14,7 @@ push @Final, sub {
 
     # check we don't have a flag or config to not upgrade to bigint as the
     # size of tables could be large and users may want to do this as a seperate step
-    return if ($fts_config->{'NoBigintUpgrade'} or $ENV{NO_BIGINT_UPGRADE});
+    return if ($fts_config->{'NoFulltextsearchTableUpgrade'});
 
     my $dbh = RT->DatabaseHandle->dbh;
 
@@ -40,7 +40,7 @@ sub get_pg_ddl_query {
 
 sub get_mysql_ddl_query {
     my ($table) = @_;
-    return "ALTER TABLE $table MODIFY id BIGINT NOT NULL AUTO_INCREMENT;";
+    return "ALTER TABLE $table MODIFY id BIGINT NOT NULL AUTO_INCREMENT, CONVERT TO CHARACTER SET utf8mb4;";
 }
 
 sub table_exists {
