@@ -348,6 +348,76 @@ sub action_coredata {
     return $RT::Handle->InsertInitialData;
 }
 
+sub action_alter {
+    my %args = @_;
+
+    $log_actions = 1;
+    print "Now altering database.\n";
+
+    my $file = $args{'datafile'};
+    $file ||= $args{'datadir'}."/ddl";
+
+    my $individual_id = Data::GUID->new->as_string();
+    my %upgrade_data = (
+        action   => 'alter',
+        filename => Cwd::abs_path($file),
+        stage    => 'before',
+        full_id  => $full_id,
+        individual_id => $individual_id
+    );
+    $upgrade_data{'ext_version'} = $ext_version if $ext_version;
+
+    open my $handle, '<', $file or warn "Unable to open $file: $!";
+    $upgrade_data{content} = do {local $/; <$handle>} if $handle;
+
+    RT->System->AddUpgradeHistory($package => \%upgrade_data);
+
+    our ( @Initial, @Final );
+    local ( @Initial, @Final );
+
+    local $@;
+
+    my ($ok, $message);
+  ALTER: {
+        $ok = eval { require $file };
+        unless ($ok) {
+            ($ok, $message) = (0, "Couldn't load ddl script '$file':\nERROR:" . $@);
+            last ALTER;
+        }
+
+        my %phases = (
+            initial => \@Initial,
+            final => \@Final
+        );
+        my $dbh = get_admin_dbh();
+        foreach my $phase (keys %phases) {
+            if (scalar @{$phases{$phase}}) {
+                $RT::Logger->debug("Running $phase actions...");
+                foreach ( @{$phases{$phase}} ) {
+                    local $@;
+                    $ok = eval { $_->(dbh => $dbh) };
+                    unless ($ok) {
+                        warn "One of $phase functions failed: $@";
+                        ($ok, $message) = (0, "One of $phase functions failed: $@");
+                        last ALTER;
+                    }
+                }
+                $RT::Logger->debug("Done.");
+            }
+        }
+        ($ok, $message) = (1, 'Done altering schema');
+    }
+
+    %upgrade_data = (
+        stage         => 'after',
+        individual_id => $individual_id,
+        return_value  => [ $ok, $message ]
+    );
+    RT->System->AddUpgradeHistory($package => \%upgrade_data);
+
+    return ( $ok, $message );
+}
+
 sub action_insert {
     state $RAN_INIT;
     my %args = @_;
@@ -563,6 +633,10 @@ sub action_upgrade {
         }
         if ( -e "$base_dir/$v/indexes" ) {
             ( $ret, $msg ) = action_indexes( %tmp );
+            return ( $ret, $msg ) unless $ret;
+        }
+        if ( -e "$base_dir/$v/ddl" ) {
+            ( $ret, $msg ) = action_alter(%tmp);
             return ( $ret, $msg ) unless $ret;
         }
         if ( -e "$base_dir/$v/content" ) {
