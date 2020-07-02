@@ -4,19 +4,20 @@ use warnings;
 our @Final;
 
 push @Final, sub {
+    my %args = @_;
     # skip unless fulltextsearch is enabled
     my $fts_config = RT->Config->Get('FullTextSearch');
-    return unless ($fts_config->{'Enable'});
+    return 1 unless ($fts_config->{'Enable'});
 
     # check config to see if db type is applicable
     my $db_type = RT->Config->Get('DatabaseType');
-    return unless ($db_type eq 'Pg' or $db_type eq 'mysql');
+    return 1 unless ($db_type eq 'Pg' or $db_type eq 'mysql');
 
     # check we don't have a flag or config to not upgrade to bigint as the
     # size of tables could be large and users may want to do this as a seperate step
-    return if ($fts_config->{'NoFulltextsearchTableUpgrade'});
+    return 1 if ($fts_config->{'NoFulltextsearchTableUpgrade'});
 
-    my $dbh = RT->DatabaseHandle->dbh;
+    my $dbh = $args{dbh};
 
     # get tablename from config, fall back to default tablename
     my $table = $fts_config->{'Table'} || 'AttachmentsIndex';
@@ -29,6 +30,7 @@ push @Final, sub {
             warn "failed to update fulltext search table $table key to bigint : $@ : " . $dbh->errstr
         }
     }
+    return 1;
 };
 
 ###
